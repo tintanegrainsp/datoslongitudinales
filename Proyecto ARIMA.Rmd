@@ -1,0 +1,110 @@
+---
+title: "Proyecto ARIMA1"
+author: "Martínez-Pacheco, Morales-Ríos"
+date: "`r Sys.Date()`"
+output: html_document
+always_allow_html: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+## Carga de librerías
+
+```{r libraries, echo=TRUE, message=FALSE, warning=FALSE}
+
+library(tidyverse)
+library(lubridate)
+library(ggplot2)
+
+
+```
+
+## Importación de bases de datos
+
+```{r import, echo=TRUE, message=FALSE, warning=FALSE}
+
+ile_16_18 <- read_csv("https://raw.githubusercontent.com/tintanegrainsp/datoslongitudinales/main/ile-2016-2018_2.csv")
+ile_19_21 <- read_csv("https://raw.githubusercontent.com/tintanegrainsp/datoslongitudinales/main/ile-2019-2021_2.csv")
+ile_22 <- read_csv("https://raw.githubusercontent.com/tintanegrainsp/datoslongitudinales/main/ile-2022-final_2.csv")
+
+```
+
+## Adecuación de bases
+
+Se eliminará la variable "edad_primera_menstruación" de todas las bases debido a que en la base que corresponde al periodo 2016-2018 existe amplia heterogeneidad en la forma en que fue recabada la información y porque no será usada dentro de este análisis inicial. Además se elimina una observación aberrante que ocurrió en 2015.
+
+```{r adecuación, echo=TRUE, message=FALSE, warning=FALSE}
+
+ile_16_18$edad_primera_menstruacion <- NULL
+ile_19_21$edad_primera_menstruacion <- NULL
+ile_22$edad_primera_menstruacion <- NULL
+ile_16_18 <- ile_16_18 %>% 
+  filter(año != 2015)
+
+```
+
+
+## Unión de bases
+```{r, echo=TRUE, message=FALSE, warning=FALSE}
+
+ilecomp <- bind_rows(ile_16_18, ile_19_21, ile_22)
+
+```
+
+## ILE por mes
+
+Se calcula el total de ILE por mes tomando en cuenta la fecha de ingreso ("fecha_ingreso"), así como el promedio mensual tomando en cuenta 30 días como denominador.
+
+```{r}
+ilemes <- ilecomp%>%
+  group_by(floor_date(fecha_ingreso,"month")) %>%
+  tally() %>% 
+  mutate(Promedio = n/30) %>% 
+  rename(Fecha = 1, Promedio = 3)
+
+# ilemestot <- ilecomp%>%
+#   group_by(floor_date(fecha_ingreso,"month")) %>%
+#   tally() %>% 
+#   mutate(Promedio = n/30) %>% 
+#   rename(Fecha = 1, Total = 2, Promedio = 3)
+
+ilemes$n <- NULL
+
+ggplot(ilemes) + 
+  geom_line(aes(x = Fecha, y = Promedio))+
+  labs(title = "Promedio de Interrupciones Legales del Embarazo en Ciudad de México", subtitle = "por mes", x = "Fecha de ingreso",y = "Promedio de ILE", caption = "Fuente: Datos del Portal de Datos Abiertos de la CDMX")+
+  theme_minimal()
+```
+## Base de datos "long"
+
+```{r}
+
+ilemesL <- ilemes %>% 
+  mutate(Año = year(Fecha)) %>% 
+  mutate(Mes = month(Fecha, label = T)) %>% 
+  mutate(Fecha = NULL)
+
+```
+
+## Base de datos "wide"
+
+```{r}
+
+ilemesW <- 
+  pivot_wider(ilemesL,names_from = "Mes", values_from = "Promedio")
+
+
+```
+
+## Definición de objeto "Time series"
+```{r}
+
+ilemesTS <- ilemes
+
+ilemesTS$Fecha <- NULL
+
+ileTS <- ts(ilemesTS, frequency=12, start = c(2016,1))
+
+```
